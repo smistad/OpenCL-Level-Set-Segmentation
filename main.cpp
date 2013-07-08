@@ -82,12 +82,20 @@ Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * ph
         );
 
         // Calculate curvature
-        float3 nMinus;
-        float3 nPlus;
+        float3 nMinus(
+                Dminus.x / sqrt(Dminus.x*Dminus.x+pow(0.5f*(DyMinus.x+D.y),2.0f)+pow(0.5f*(DzMinus.x+D.z),2.0f)),
+                Dminus.x / sqrt(Dminus.y*Dminus.y+pow(0.5f*(DxMinus.y+D.x),2.0f)+pow(0.5f*(DzMinus.y+D.z),2.0f)),
+                Dminus.x / sqrt(Dminus.z*Dminus.z+pow(0.5f*(DxMinus.z+D.x),2.0f)+pow(0.5f*(DyMinus.z+D.y),2.0f))
+        );
+        float3 nPlus(
+                Dplus.x / sqrt(Dplus.x*Dplus.x+pow(0.5f*(DyPlus.x+D.y),2.0f)+pow(0.5f*(DzPlus.x+D.z),2.0f)),
+                Dplus.x / sqrt(Dplus.y*Dplus.y+pow(0.5f*(DxPlus.y+D.x),2.0f)+pow(0.5f*(DzPlus.y+D.z),2.0f)),
+                Dplus.x / sqrt(Dplus.z*Dplus.z+pow(0.5f*(DxPlus.z+D.x),2.0f)+pow(0.5f*(DyPlus.z+D.y),2.0f))
+        );
+
         float curvature = (nPlus.x-nMinus.x)+(nPlus.y-nMinus.y)+(nPlus.z-nPlus.z);
 
         // Calculate speed term
-
         float alpha;
         float threshold;
         float epsilon;
