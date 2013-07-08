@@ -1,0 +1,3 @@
+[submodule "SIPL"]
+	path = SIPL
+	url = git@github.com:smistad/SIPL.git
