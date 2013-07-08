@@ -1,6 +1,7 @@
 #include "SIPL/Core.hpp"
 #include <cmath>
 #include <queue>
+#include <iostream>
 using namespace SIPL;
 using namespace std;
 
@@ -10,8 +11,9 @@ using namespace std;
 Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
     // Identify the zero level set
     queue<int3> queue;
-    Volume<float> * newPhi;
+    Volume<float> * newPhi = new Volume<float>(phi->getSize());
     float inf = -9999999.0f;
+    float inf2 = -99999999.0f;
     newPhi->fill(inf);
     float threshold = 0.0001f;
 
@@ -30,7 +32,7 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
                 int3 n = pos + r;
                 if(!phi->inBounds(n))
                     continue;
-                if(fabs(phi->get(pos)) >= threshold) {
+                if(fabs(phi->get(n)) >= threshold) {
                     queue.push(n);
                 }
             }}}
@@ -40,7 +42,7 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
     // Do a BFS over the entire volume with the zero level set as start points
     // If phi is negative, distance is set as negative
     // If it is positive distance is set as positive
-    while(queue.empty()) {
+    while(!queue.empty()) {
         int3 current = queue.front();
         queue.pop();
 
@@ -58,15 +60,16 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
             if(!phi->inBounds(n) || (a == 0 && b == 0 && c == 0))
                 continue;
 
-            if(newPhi->get(n) != inf) {
+            if(newPhi->get(n) != inf && newPhi->get(n) != inf2) {
                 if(negative) {
-                    newDistance = MAX(newDistance, newPhi->get(n));
+                    newDistance = MAX(newDistance, newPhi->get(n))-1.0f;
                 } else {
-                    newDistance = MIN(newDistance, newPhi->get(n));
+                    newDistance = MIN(newDistance, newPhi->get(n))+1.0f;
                 }
-            } else {
+            } else if(newPhi->get(n) != inf2) {
                 // Unvisited, Add to queue
                 queue.push(n);
+                newPhi->set(n,inf2);
             }
         }}}
 
@@ -82,9 +85,9 @@ Volume<float> * createInitialMask(int3 origin, int size, int3 volumeSize) {
     Volume<float> * mask = new Volume<float>(volumeSize);
     mask->fill(1.0f);
 
-    for(int z = origin.z; z < size; z++) {
-    for(int y = origin.y; y < size; y++) {
-    for(int x = origin.x; x < size; x++) {
+    for(int z = origin.z; z < origin.z+size; z++) {
+    for(int y = origin.y; y < origin.y+size; y++) {
+    for(int x = origin.x; x < origin.x+size; x++) {
         float value = -1.0f;
         if(z == origin.z || y == origin.y || x == origin.x
                 || z == origin.z+size-1 || y == origin.y+size-1 || x == origin.x+size-1)
@@ -202,7 +205,7 @@ Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * ph
     return phiNext;
 }
 
-Volume<char> * runLevelSet(Volume<short> * input, Volume<float> * initialMask, int iterations, int reinitialize) {
+void runLevelSet(Volume<short> * input, Volume<float> * initialMask, int iterations, int reinitialize) {
     Volume<float> * phi = calculateSignedDistanceTransform(initialMask);
 
     for(int i = 0; i < iterations; i++) {
@@ -217,16 +220,21 @@ Volume<char> * runLevelSet(Volume<short> * input, Volume<float> * initialMask, i
 int main(int argc, char ** argv) {
 
     // Load volume
-    Volume<short> * input = new Volume<short>(argv[1]);
+    Volume<short> * input = new Volume<short>(int3(100, 100, 100));
 
     // Set initial mask
     int3 origin(atoi(argv[2]), atoi(argv[3]), atoi(argv[4]));
     int size = atoi(argv[5]);
 
     Volume<float> * initialMask = createInitialMask(origin, size, input->getSize());
+    initialMask->show(0.0, 2.0f);
+    Volume<float> * test = calculateSignedDistanceTransform(initialMask);
+    test->show(0.0f, 20.0f);
 
+    /*
     // Do level set
-    Volume<char> * segmentation = runLevelSet(input, initialMask, 100, 20);
+    runLevelSet(input, initialMask, 100, 20);
+    */
 
     // Visualize result
 }
