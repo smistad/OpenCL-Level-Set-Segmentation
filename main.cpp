@@ -51,7 +51,7 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
         if(!negative)
             newDistance *= -1.0f;
 
-        // Check all neighbors that are not inf
+        // Check all neighbors that are not inf or inf2
         for(int a = -1; a < 2; a++) {
         for(int b = -1; b < 2; b++) {
         for(int c = -1; c < 2; c++) {
@@ -62,9 +62,9 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
 
             if(newPhi->get(n) != inf && newPhi->get(n) != inf2) {
                 if(negative) {
-                    newDistance = MAX(newDistance, newPhi->get(n))-1.0f;
+                    newDistance = MAX(newDistance, newPhi->get(n));
                 } else {
-                    newDistance = MIN(newDistance, newPhi->get(n))+1.0f;
+                    newDistance = MIN(newDistance, newPhi->get(n));
                 }
             } else if(newPhi->get(n) != inf2) {
                 // Unvisited, Add to queue
@@ -73,7 +73,12 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
             }
         }}}
 
-        newPhi->set(current, newDistance);
+        if(negative) {
+            newPhi->set(current, newDistance-1.0f);
+        } else {
+            newPhi->set(current, newDistance+1.0f);
+        }
+
     }
 
     delete phi;
