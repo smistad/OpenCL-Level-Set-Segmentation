@@ -1,16 +1,98 @@
 #include "SIPL/Core.hpp"
 #include <cmath>
+#include <queue>
 using namespace SIPL;
+using namespace std;
 
 #define MAX(a,b) (a > b ? a : b)
 #define MIN(a,b) (a < b ? a : b)
 
 Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
+    // Identify the zero level set
+    queue<int3> queue;
+    Volume<float> * newPhi;
+    float inf = -9999999.0f;
+    newPhi->fill(inf);
+    float threshold = 0.0001f;
 
+    for(int z = 1; z < phi->getDepth()-1; z++) {
+    for(int y = 1; y < phi->getHeight()-1; y++) {
+    for(int x = 1; x < phi->getWidth()-1; x++) {
+        int3 pos(x,y,z);
+        if(fabs(phi->get(pos)) < threshold) {
+            newPhi->set(pos, 0.0f);
+
+            // Add neighbors to queue
+            for(int a = -1; a < 2; a++) {
+            for(int b = -1; b < 2; b++) {
+            for(int c = -1; c < 2; c++) {
+                int3 r(a,b,c);
+                int3 n = pos + r;
+                if(!phi->inBounds(n))
+                    continue;
+                if(fabs(phi->get(pos)) >= threshold) {
+                    queue.push(n);
+                }
+            }}}
+        }
+    }}}
+
+    // Do a BFS over the entire volume with the zero level set as start points
+    // If phi is negative, distance is set as negative
+    // If it is positive distance is set as positive
+    while(queue.empty()) {
+        int3 current = queue.front();
+        queue.pop();
+
+        bool negative = phi->get(current) < 0;
+        float newDistance = inf;
+        if(!negative)
+            newDistance *= -1.0f;
+
+        // Check all neighbors that are not inf
+        for(int a = -1; a < 2; a++) {
+        for(int b = -1; b < 2; b++) {
+        for(int c = -1; c < 2; c++) {
+            int3 r(a,b,c);
+            int3 n = current + r;
+            if(!phi->inBounds(n) || (a == 0 && b == 0 && c == 0))
+                continue;
+
+            if(newPhi->get(n) != inf) {
+                if(negative) {
+                    newDistance = MAX(newDistance, newPhi->get(n));
+                } else {
+                    newDistance = MIN(newDistance, newPhi->get(n));
+                }
+            } else {
+                // Unvisited, Add to queue
+                queue.push(n);
+            }
+        }}}
+
+        newPhi->set(current, newDistance);
+    }
+
+    delete phi;
+    return newPhi;
 }
 
-Volume<float> * createInitialMask(int3 origin, int size) {
+Volume<float> * createInitialMask(int3 origin, int size, int3 volumeSize) {
 
+    Volume<float> * mask = new Volume<float>(volumeSize);
+    mask->fill(1.0f);
+
+    for(int z = origin.z; z < size; z++) {
+    for(int y = origin.y; y < size; y++) {
+    for(int x = origin.x; x < size; x++) {
+        float value = -1.0f;
+        if(z == origin.z || y == origin.y || x == origin.x
+                || z == origin.z+size-1 || y == origin.y+size-1 || x == origin.x+size-1)
+            value = 0.0f;
+        mask->set(x,y,z, value);
+    }}}
+
+    return mask;
 }
 
 Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * phi) {
@@ -96,10 +178,12 @@ Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * ph
         float curvature = (nPlus.x-nMinus.x)+(nPlus.y-nMinus.y)+(nPlus.z-nPlus.z);
 
         // Calculate speed term
-        float alpha;
+        float alpha = 0.5f;
         float threshold;
         float epsilon;
         float speed = alpha*(epsilon-fabs(input->get(pos)-threshold)) + (1.0f-alpha)*curvature;
+
+        // Determine gradient based on speed direction
         float3 gradient;
         if(speed < 0) {
             gradient = gradientMin;
@@ -139,7 +223,7 @@ int main(int argc, char ** argv) {
     int3 origin(atoi(argv[2]), atoi(argv[3]), atoi(argv[4]));
     int size = atoi(argv[5]);
 
-    Volume<float> * initialMask = createInitialMask(origin, size);
+    Volume<float> * initialMask = createInitialMask(origin, size, input->getSize());
 
     // Do level set
     Volume<char> * segmentation = runLevelSet(input, initialMask, 100, 20);
