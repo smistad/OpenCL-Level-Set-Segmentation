@@ -2,6 +2,7 @@
 #include <cmath>
 #include <queue>
 #include <iostream>
+#include <cfloat>
 using namespace SIPL;
 using namespace std;
 
@@ -15,7 +16,7 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
     float inf = -9999999.0f;
     float inf2 = -99999999.0f;
     newPhi->fill(inf);
-    float threshold = 0.0001f;
+    float threshold = 0.01f;
 
     for(int z = 1; z < phi->getDepth()-1; z++) {
     for(int y = 1; y < phi->getHeight()-1; y++) {
@@ -45,6 +46,8 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
     while(!queue.empty()) {
         int3 current = queue.front();
         queue.pop();
+        if(newPhi->get(current) > inf) // already processed
+            continue;
 
         bool negative = phi->get(current) < 0;
         float newDistance = inf;
@@ -62,9 +65,9 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
 
             if(newPhi->get(n) != inf && newPhi->get(n) != inf2) {
                 if(negative) {
-                    newDistance = MAX(newDistance, newPhi->get(n));
+                    newDistance = MAX(newDistance, newPhi->get(n)-1.0f);//r.length());
                 } else {
-                    newDistance = MIN(newDistance, newPhi->get(n));
+                    newDistance = MIN(newDistance, newPhi->get(n)+1.0f);//r.length());
                 }
             } else if(newPhi->get(n) != inf2) {
                 // Unvisited, Add to queue
@@ -73,11 +76,7 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
             }
         }}}
 
-        if(negative) {
-            newPhi->set(current, newDistance-1.0f);
-        } else {
-            newPhi->set(current, newDistance+1.0f);
-        }
+        newPhi->set(current, newDistance);
 
     }
 
@@ -105,6 +104,7 @@ Volume<float> * createInitialMask(int3 origin, int size, int3 volumeSize) {
 
 Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * phi) {
     Volume<float> * phiNext = new Volume<float>(phi->getSize());
+    phiNext->fill(1000);
     for(int z = 1; z < phi->getDepth()-1; z++) {
     for(int y = 1; y < phi->getHeight()-1; y++) {
     for(int x = 1; x < phi->getWidth()-1; x++) {
@@ -117,9 +117,9 @@ Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * ph
                 0.5f*(phi->get(int3(x,y,z+1))+phi->get(int3(x,y,z-1)))
         );
         float3 Dminus(
-                phi->get(int3(x-1,y,z))-phi->get(pos),
-                phi->get(int3(x,y-1,z))-phi->get(pos),
-                phi->get(int3(x,y,z-1))-phi->get(pos)
+                phi->get(pos)-phi->get(int3(x-1,y,z)),
+                phi->get(pos)-phi->get(int3(x,y-1,z)),
+                phi->get(pos)-phi->get(int3(x,y,z-1))
         );
         float3 Dplus(
                 phi->get(int3(x+1,y,z))-phi->get(pos),
@@ -173,22 +173,22 @@ Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * ph
 
         // Calculate curvature
         float3 nMinus(
-                Dminus.x / sqrt(Dminus.x*Dminus.x+pow(0.5f*(DyMinus.x+D.y),2.0f)+pow(0.5f*(DzMinus.x+D.z),2.0f)),
-                Dminus.x / sqrt(Dminus.y*Dminus.y+pow(0.5f*(DxMinus.y+D.x),2.0f)+pow(0.5f*(DzMinus.y+D.z),2.0f)),
-                Dminus.x / sqrt(Dminus.z*Dminus.z+pow(0.5f*(DxMinus.z+D.x),2.0f)+pow(0.5f*(DyMinus.z+D.y),2.0f))
+                Dminus.x / sqrt(FLT_EPSILON+Dminus.x*Dminus.x+pow(0.5f*(DyMinus.x+D.y),2.0f)+pow(0.5f*(DzMinus.x+D.z),2.0f)),
+                Dminus.y / sqrt(FLT_EPSILON+Dminus.y*Dminus.y+pow(0.5f*(DxMinus.y+D.x),2.0f)+pow(0.5f*(DzMinus.y+D.z),2.0f)),
+                Dminus.z / sqrt(FLT_EPSILON+Dminus.z*Dminus.z+pow(0.5f*(DxMinus.z+D.x),2.0f)+pow(0.5f*(DyMinus.z+D.y),2.0f))
         );
         float3 nPlus(
-                Dplus.x / sqrt(Dplus.x*Dplus.x+pow(0.5f*(DyPlus.x+D.y),2.0f)+pow(0.5f*(DzPlus.x+D.z),2.0f)),
-                Dplus.x / sqrt(Dplus.y*Dplus.y+pow(0.5f*(DxPlus.y+D.x),2.0f)+pow(0.5f*(DzPlus.y+D.z),2.0f)),
-                Dplus.x / sqrt(Dplus.z*Dplus.z+pow(0.5f*(DxPlus.z+D.x),2.0f)+pow(0.5f*(DyPlus.z+D.y),2.0f))
+                Dplus.x / sqrt(FLT_EPSILON+Dplus.x*Dplus.x+pow(0.5f*(DyPlus.x+D.y),2.0f)+pow(0.5f*(DzPlus.x+D.z),2.0f)),
+                Dplus.y / sqrt(FLT_EPSILON+Dplus.y*Dplus.y+pow(0.5f*(DxPlus.y+D.x),2.0f)+pow(0.5f*(DzPlus.y+D.z),2.0f)),
+                Dplus.z / sqrt(FLT_EPSILON+Dplus.z*Dplus.z+pow(0.5f*(DxPlus.z+D.x),2.0f)+pow(0.5f*(DyPlus.z+D.y),2.0f))
         );
 
-        float curvature = (nPlus.x-nMinus.x)+(nPlus.y-nMinus.y)+(nPlus.z-nPlus.z);
+        float curvature = ((nPlus.x-nMinus.x)+(nPlus.y-nMinus.y)+(nPlus.z-nMinus.z))*0.5;
 
         // Calculate speed term
-        float alpha = 0.5f;
-        float threshold;
-        float epsilon;
+        float alpha = 0.5;
+        float threshold = 100;
+        float epsilon = 25;
         float speed = alpha*(epsilon-fabs(input->get(pos)-threshold)) + (1.0f-alpha)*curvature;
 
         // Determine gradient based on speed direction
@@ -196,50 +196,98 @@ Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * ph
         if(speed < 0) {
             gradient = gradientMin;
         } else {
-            gradient = gradientMin;
+            gradient = gradientMax;
         }
 
         // Stability CFL
         // max(fabs(speed*gradient.length()))
-        float deltaT = 1.0f / 1.0f ;
+        float deltaT = 0.01f;
 
         // Update the level set function phi
         phiNext->set(pos, phi->get(pos) + deltaT*speed*gradient.length());
     }}}
-    delete phi;
+    //delete phi;
     return phiNext;
+}
+
+void visualize(Volume<short> * input, Volume<float> * phi) {
+    Volume<float2> * maskAndInput = new Volume<float2>(input->getSize());
+    for(int i = 0; i < input->getTotalSize(); i++) {
+        float2 v(0,0);
+        float intensity = input->get(i);
+        if(intensity < 50) {
+            intensity = 0.0f;
+        } else if(intensity > 150) {
+            intensity = 1.0f;
+        } else {
+            intensity = (intensity - 50.0f)/100.0f;
+        }
+        v.x = intensity;
+        if(phi->get(i) < 0) {
+            v.y = 1.0f;
+        }
+        maskAndInput->set(i,v);
+    }
+    maskAndInput->show();
+
 }
 
 void runLevelSet(Volume<short> * input, Volume<float> * initialMask, int iterations, int reinitialize) {
     Volume<float> * phi = calculateSignedDistanceTransform(initialMask);
+    phi->show(0,255);
+    std::cout << "signed distance transform created" << std::endl;
 
     for(int i = 0; i < iterations; i++) {
         phi = updateLevelSetFunction(input, phi);
+        std::cout << "iteration " << (i+1) << " finished " << std::endl;
+        visualize(input, phi);
+        phi->show(0,255);
 
-        if(i > 0 && i % reinitialize == 0)
+        if(i > 0 && i % reinitialize == 0) {
             phi = calculateSignedDistanceTransform(phi);
+            std::cout << "signed distance transform created" << std::endl;
+        }
     }
-
 }
+
+void printPhiSlice(Volume<float> * phi) {
+   int slice = phi->getDepth() / 2;
+   for(int y = 0; y < phi->getHeight(); y++) {
+       for(int x = 0; x < phi->getWidth(); x++) {
+           std::cout << phi->get(x,y,slice) << "\t";
+       }
+       std::cout << std::endl;
+   }
+}
+
 
 int main(int argc, char ** argv) {
 
+    /*
+    Volume<float> * test = createInitialMask(int3(4,4,4), 8, int3(16,16,16));
+    Volume<float> * phi = calculateSignedDistanceTransform(test);
+    printPhiSlice(phi);
+    */
+
     // Load volume
-    Volume<short> * input = new Volume<short>(int3(100, 100, 100));
+    Volume<short> * input = new Volume<short>(argv[1]);
+    for(int i = 0; i < input->getTotalSize();i++) {
+        if(input->get(i) < 0)
+            input->set(i,0);
+    }
+
+    std::cout << "Dataset of size " << input->getWidth() << ", " << input->getHeight() << ", " << input->getDepth() << std::endl;
 
     // Set initial mask
     int3 origin(atoi(argv[2]), atoi(argv[3]), atoi(argv[4]));
     int size = atoi(argv[5]);
 
     Volume<float> * initialMask = createInitialMask(origin, size, input->getSize());
-    initialMask->show(0.0, 2.0f);
-    Volume<float> * test = calculateSignedDistanceTransform(initialMask);
-    test->show(0.0f, 20.0f);
+    visualize(input, initialMask);
 
-    /*
+
     // Do level set
     runLevelSet(input, initialMask, 100, 20);
-    */
 
     // Visualize result
 }
