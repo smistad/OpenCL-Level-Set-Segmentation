@@ -16,7 +16,7 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
     float inf = -9999999.0f;
     float inf2 = -99999999.0f;
     newPhi->fill(inf);
-    float threshold = 0.01f;
+    float threshold = 0.00001f;
 
     for(int z = 1; z < phi->getDepth()-1; z++) {
     for(int y = 1; y < phi->getHeight()-1; y++) {
@@ -65,9 +65,9 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
 
             if(newPhi->get(n) != inf && newPhi->get(n) != inf2) {
                 if(negative) {
-                    newDistance = MAX(newDistance, newPhi->get(n)-1.0f);//r.length());
+                    newDistance = MAX(newDistance, newPhi->get(n)-r.length());
                 } else {
-                    newDistance = MIN(newDistance, newPhi->get(n)+1.0f);//r.length());
+                    newDistance = MIN(newDistance, newPhi->get(n)+r.length());
                 }
             } else if(newPhi->get(n) != inf2) {
                 // Unvisited, Add to queue
@@ -105,6 +105,7 @@ Volume<float> * createInitialMask(int3 origin, int size, int3 volumeSize) {
 Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * phi) {
     Volume<float> * phiNext = new Volume<float>(phi->getSize());
     phiNext->fill(1000);
+#pragma omp parallel for
     for(int z = 1; z < phi->getDepth()-1; z++) {
     for(int y = 1; y < phi->getHeight()-1; y++) {
     for(int x = 1; x < phi->getWidth()-1; x++) {
@@ -112,9 +113,9 @@ Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * ph
 
         // Calculate all first order derivatives
         float3 D(
-                0.5f*(phi->get(int3(x+1,y,z))+phi->get(int3(x-1,y,z))),
-                0.5f*(phi->get(int3(x,y+1,z))+phi->get(int3(x,y-1,z))),
-                0.5f*(phi->get(int3(x,y,z+1))+phi->get(int3(x,y,z-1)))
+                0.5f*(phi->get(int3(x+1,y,z))-phi->get(int3(x-1,y,z))),
+                0.5f*(phi->get(int3(x,y+1,z))-phi->get(int3(x,y-1,z))),
+                0.5f*(phi->get(int3(x,y,z+1))-phi->get(int3(x,y,z-1)))
         );
         float3 Dminus(
                 phi->get(pos)-phi->get(int3(x-1,y,z)),
@@ -142,32 +143,32 @@ Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * ph
         // Calculate all second order derivatives
         float3 DxMinus(
                 0.0f,
-                0.5f*(phi->get(int3(x+1,y-1,z))+phi->get(int3(x-1,y-1,z))),
-                0.5f*(phi->get(int3(x+1,y,z-1))+phi->get(int3(x-1,y,z-1)))
+                0.5f*(phi->get(int3(x+1,y-1,z))-phi->get(int3(x-1,y-1,z))),
+                0.5f*(phi->get(int3(x+1,y,z-1))-phi->get(int3(x-1,y,z-1)))
         );
         float3 DxPlus(
                 0.0f,
-                0.5f*(phi->get(int3(x+1,y+1,z))+phi->get(int3(x-1,y+1,z))),
-                0.5f*(phi->get(int3(x+1,y,z+1))+phi->get(int3(x-1,y,z+1)))
+                0.5f*(phi->get(int3(x+1,y+1,z))-phi->get(int3(x-1,y+1,z))),
+                0.5f*(phi->get(int3(x+1,y,z+1))-phi->get(int3(x-1,y,z+1)))
         );
         float3 DyMinus(
-                0.5f*(phi->get(int3(x-1,y+1,z))+phi->get(int3(x-1,y-1,z))),
+                0.5f*(phi->get(int3(x-1,y+1,z))-phi->get(int3(x-1,y-1,z))),
                 0.0f,
-                0.5f*(phi->get(int3(x,y+1,z-1))+phi->get(int3(x,y-1,z-1)))
+                0.5f*(phi->get(int3(x,y+1,z-1))-phi->get(int3(x,y-1,z-1)))
         );
         float3 DyPlus(
-                0.5f*(phi->get(int3(x+1,y+1,z))+phi->get(int3(x+1,y-1,z))),
+                0.5f*(phi->get(int3(x+1,y+1,z))-phi->get(int3(x+1,y-1,z))),
                 0.0f,
-                0.5f*(phi->get(int3(x,y+1,z+1))+phi->get(int3(x,y-1,z+1)))
+                0.5f*(phi->get(int3(x,y+1,z+1))-phi->get(int3(x,y-1,z+1)))
         );
         float3 DzMinus(
-                0.5f*(phi->get(int3(x-1,y,z+1))+phi->get(int3(x-1,y,z-1))),
-                0.5f*(phi->get(int3(x,y-1,z+1))+phi->get(int3(x,y-1,z-1))),
+                0.5f*(phi->get(int3(x-1,y,z+1))-phi->get(int3(x-1,y,z-1))),
+                0.5f*(phi->get(int3(x,y-1,z+1))-phi->get(int3(x,y-1,z-1))),
                 0.0f
         );
         float3 DzPlus(
-                0.5f*(phi->get(int3(x+1,y,z+1))+phi->get(int3(x+1,y,z-1))),
-                0.5f*(phi->get(int3(x,y+1,z+1))+phi->get(int3(x,y+1,z-1))),
+                0.5f*(phi->get(int3(x+1,y,z+1))-phi->get(int3(x+1,y,z-1))),
+                0.5f*(phi->get(int3(x,y+1,z+1))-phi->get(int3(x,y+1,z-1))),
                 0.0f
         );
 
@@ -186,10 +187,11 @@ Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * ph
         float curvature = ((nPlus.x-nMinus.x)+(nPlus.y-nMinus.y)+(nPlus.z-nMinus.z))*0.5;
 
         // Calculate speed term
-        float alpha = 0.5;
-        float threshold = 100;
-        float epsilon = 25;
-        float speed = alpha*(epsilon-fabs(input->get(pos)-threshold)) + (1.0f-alpha)*curvature;
+        float alpha = 0.03;
+        float threshold = 150;
+        float epsilon = 100;
+        //float speed = -alpha*(epsilon-fabs(input->get(pos)-threshold)) + (1.0f-alpha)*curvature;
+        float speed = -alpha*(epsilon-(threshold-input->get(pos))) + (1.0f-alpha)*curvature;
 
         // Determine gradient based on speed direction
         float3 gradient;
@@ -198,15 +200,18 @@ Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * ph
         } else {
             gradient = gradientMax;
         }
+        if(gradient.length() > 1.0f)
+            gradient = gradient.normalize();
 
         // Stability CFL
         // max(fabs(speed*gradient.length()))
-        float deltaT = 0.01f;
+        float deltaT = 0.1f;
 
         // Update the level set function phi
         phiNext->set(pos, phi->get(pos) + deltaT*speed*gradient.length());
+        //std::cout << speed << " " << gradient.length() << std::endl;
     }}}
-    //delete phi;
+    delete phi;
     return phiNext;
 }
 
@@ -232,7 +237,7 @@ void visualize(Volume<short> * input, Volume<float> * phi) {
 
 }
 
-void runLevelSet(Volume<short> * input, Volume<float> * initialMask, int iterations, int reinitialize) {
+Volume<float> * runLevelSet(Volume<short> * input, Volume<float> * initialMask, int iterations, int reinitialize) {
     Volume<float> * phi = calculateSignedDistanceTransform(initialMask);
     phi->show(0,255);
     std::cout << "signed distance transform created" << std::endl;
@@ -240,14 +245,17 @@ void runLevelSet(Volume<short> * input, Volume<float> * initialMask, int iterati
     for(int i = 0; i < iterations; i++) {
         phi = updateLevelSetFunction(input, phi);
         std::cout << "iteration " << (i+1) << " finished " << std::endl;
-        visualize(input, phi);
-        phi->show(0,255);
+        //if(i % 10 == 0)
+        //visualize(input, phi);
+        //phi->show(0,255);
 
         if(i > 0 && i % reinitialize == 0) {
             phi = calculateSignedDistanceTransform(phi);
             std::cout << "signed distance transform created" << std::endl;
         }
     }
+
+    return phi;
 }
 
 void printPhiSlice(Volume<float> * phi) {
@@ -274,20 +282,36 @@ int main(int argc, char ** argv) {
     for(int i = 0; i < input->getTotalSize();i++) {
         if(input->get(i) < 0)
             input->set(i,0);
+        if(input->get(i) > 200)
+            input->set(i,200);
     }
 
     std::cout << "Dataset of size " << input->getWidth() << ", " << input->getHeight() << ", " << input->getDepth() << std::endl;
 
     // Set initial mask
-    int3 origin(atoi(argv[2]), atoi(argv[3]), atoi(argv[4]));
-    int size = atoi(argv[5]);
+    int3 origin(atoi(argv[3]), atoi(argv[4]), atoi(argv[5]));
+    int size = atoi(argv[6]);
 
     Volume<float> * initialMask = createInitialMask(origin, size, input->getSize());
     visualize(input, initialMask);
 
 
     // Do level set
-    runLevelSet(input, initialMask, 100, 20);
+    Volume<float> * res = runLevelSet(input, initialMask, atoi(argv[7]), 10000000);
 
     // Visualize result
+    visualize(input, res);
+
+    // Store result
+    Volume<char> * segmentation = new Volume<char>(res->getSize());
+    segmentation->setSpacing(input->getSpacing());
+    for(int i = 0; i < res->getTotalSize(); i++) {
+        if(res->get(i) < 0.0f) {
+            segmentation->set(i, 1);
+        } else {
+            segmentation->set(i, 0);
+        }
+    }
+
+    segmentation->save(argv[2]);
 }
