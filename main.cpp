@@ -255,7 +255,6 @@ void visualize(Volume<short> * input, Volume<float> * phi) {
 Volume<float> * runLevelSet(Volume<short> * input, Volume<float> * initialMask, int iterations, int reinitialize) {
     Volume<float> * phi = calculateSignedDistanceTransform(initialMask);
     std::cout << "signed distance transform created" << std::endl;
-    delete initialMask;
 
     for(int i = 0; i < iterations; i++) {
         phi = updateLevelSetFunction(input, phi);
