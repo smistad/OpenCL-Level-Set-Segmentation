@@ -22,10 +22,10 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
     for(int y = 1; y < phi->getHeight()-1; y++) {
     for(int x = 1; x < phi->getWidth()-1; x++) {
         int3 pos(x,y,z);
-        if(fabs(phi->get(pos)) < threshold) {
-            newPhi->set(pos, 0.0f);
-
-            // Add neighbors to queue
+        if(phi->get(pos) > 0) {
+            // Check to see if it is a border point
+            bool positive = false;
+            bool negative = false;
             for(int a = -1; a < 2; a++) {
             for(int b = -1; b < 2; b++) {
             for(int c = -1; c < 2; c++) {
@@ -33,10 +33,28 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
                 int3 n = pos + r;
                 if(!phi->inBounds(n))
                     continue;
-                if(fabs(phi->get(n)) >= threshold) {
-                    queue.push(n);
+                if(phi->get(n) >= 0) {
+                    positive = true;
+                } else {
+                    negative = true;
                 }
             }}}
+
+            if(positive && negative) {
+                // Is a border point
+                newPhi->set(pos, 0.0f);
+
+                // Add neighbors to queue
+                for(int a = -1; a < 2; a++) {
+                for(int b = -1; b < 2; b++) {
+                for(int c = -1; c < 2; c++) {
+                    int3 r(a,b,c);
+                    int3 n = pos + r;
+                    if(!phi->inBounds(n))
+                        continue;
+                    queue.push(n);
+                }}}
+            }
         }
     }}}
 
@@ -93,9 +111,6 @@ Volume<float> * createInitialMask(int3 origin, int size, int3 volumeSize) {
     for(int y = origin.y; y < origin.y+size; y++) {
     for(int x = origin.x; x < origin.x+size; x++) {
         float value = -1.0f;
-        if(z == origin.z || y == origin.y || x == origin.x
-                || z == origin.z+size-1 || y == origin.y+size-1 || x == origin.x+size-1)
-            value = 0.0f;
         mask->set(x,y,z, value);
     }}}
 
@@ -184,12 +199,12 @@ Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * ph
                 Dplus.z / sqrt(FLT_EPSILON+Dplus.z*Dplus.z+pow(0.5f*(DxPlus.z+D.x),2.0f)+pow(0.5f*(DyPlus.z+D.y),2.0f))
         );
 
-        float curvature = ((nPlus.x-nMinus.x)+(nPlus.y-nMinus.y)+(nPlus.z-nMinus.z))*0.5;
+        float curvature = ((nPlus.x-nMinus.x)+(nPlus.y-nMinus.y)+(nPlus.z-nMinus.z))*0.5f;
 
         // Calculate speed term
-        float alpha = 0.03;
+        float alpha = 0.02;
         float threshold = 150;
-        float epsilon = 100;
+        float epsilon = 50;
         //float speed = -alpha*(epsilon-fabs(input->get(pos)-threshold)) + (1.0f-alpha)*curvature;
         float speed = -alpha*(epsilon-(threshold-input->get(pos))) + (1.0f-alpha)*curvature;
 
@@ -239,8 +254,8 @@ void visualize(Volume<short> * input, Volume<float> * phi) {
 
 Volume<float> * runLevelSet(Volume<short> * input, Volume<float> * initialMask, int iterations, int reinitialize) {
     Volume<float> * phi = calculateSignedDistanceTransform(initialMask);
-    phi->show(0,255);
     std::cout << "signed distance transform created" << std::endl;
+    delete initialMask;
 
     for(int i = 0; i < iterations; i++) {
         phi = updateLevelSetFunction(input, phi);
@@ -256,6 +271,51 @@ Volume<float> * runLevelSet(Volume<short> * input, Volume<float> * initialMask, 
     }
 
     return phi;
+}
+
+float * createBlurMask(float sigma, int maskSize) {
+    float * mask = new float[(maskSize*2+1)*(maskSize*2+1)*(maskSize*2+1)];
+    float sum = 0.0f;
+    for(int a = -maskSize; a < maskSize+1; a++) {
+        for(int b = -maskSize; b < maskSize+1; b++) {
+            for(int c = -maskSize; c < maskSize+1; c++) {
+                sum += exp(-((float)(a*a+b*b+c*c) / (2*sigma*sigma)));
+                mask[a+maskSize+(b+maskSize)*(maskSize*2+1)+(c+maskSize)*(maskSize*2+1)*(maskSize*2+1)] = exp(-((float)(a*a+b*b+c*c) / (2*sigma*sigma)));
+
+            }
+        }
+    }
+    for(int i = 0; i < (maskSize*2+1)*(maskSize*2+1)*(maskSize*2+1); i++)
+        mask[i] = mask[i] / sum;
+
+    return mask;
+}
+
+
+SIPL::Volume<short> * doGaussianBlur(SIPL::Volume<short> * volume, float sigma, int maskSize) {
+    maskSize /= 2;
+    float * mask = createBlurMask(sigma, maskSize);
+    std::cout << "smoothing image with mask size " << maskSize*2+1 << " and sigma " << sigma << std::endl;
+    int stride = 2*maskSize+1;
+    SIPL::Volume<short> * smoothed = new SIPL::Volume<short>(volume->getSize());
+    smoothed->fill(0);
+
+#pragma omp parallel for
+    for(int z = maskSize; z < volume->getDepth()-maskSize; z++) {
+    for(int y = maskSize; y < volume->getHeight()-maskSize; y++) {
+    for(int x = maskSize; x < volume->getWidth()-maskSize; x++) {
+        SIPL::int3 pos(x,y,z);
+        double sum = 0.0f;
+        for(int c = -maskSize; c < maskSize+1; c++) {
+        for(int b = -maskSize; b < maskSize+1; b++) {
+        for(int a = -maskSize; a < maskSize+1; a++) {
+            SIPL::int3 n = pos + SIPL::int3(a,b,c);
+            sum += volume->get(n)*mask[a+maskSize+(b+maskSize)*stride+(c+maskSize)*stride*stride];
+        }}}
+        smoothed->set(pos, (short)floor(sum));
+    }}}
+    delete volume;
+    return smoothed;
 }
 
 void printPhiSlice(Volume<float> * phi) {
@@ -279,6 +339,8 @@ int main(int argc, char ** argv) {
 
     // Load volume
     Volume<short> * input = new Volume<short>(argv[1]);
+    float3 spacing = input->getSpacing();
+    input = doGaussianBlur(input, 1.0f, 3);
     for(int i = 0; i < input->getTotalSize();i++) {
         if(input->get(i) < 0)
             input->set(i,0);
@@ -297,14 +359,14 @@ int main(int argc, char ** argv) {
 
 
     // Do level set
-    Volume<float> * res = runLevelSet(input, initialMask, atoi(argv[7]), 10000000);
+    Volume<float> * res = runLevelSet(input, initialMask, atoi(argv[7]), 100);
 
     // Visualize result
     visualize(input, res);
 
     // Store result
     Volume<char> * segmentation = new Volume<char>(res->getSize());
-    segmentation->setSpacing(input->getSpacing());
+    segmentation->setSpacing(spacing);
     for(int i = 0; i < res->getTotalSize(); i++) {
         if(res->get(i) < 0.0f) {
             segmentation->set(i, 1);
