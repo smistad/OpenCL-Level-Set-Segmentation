@@ -1,9 +1,6 @@
 #include "SIPL/Core.hpp"
 #include "OpenCLUtilities/openCLUtilities.hpp"
-#include <cmath>
-#include <queue>
 #include <iostream>
-#include <cfloat>
 using namespace SIPL;
 using namespace std;
 
@@ -19,7 +16,6 @@ typedef struct OpenCL {
     cl::CommandQueue queue;
     cl::Program program;
     cl::Device device;
-    cl::Platform platform;
 } OpenCL;
 
 void updateLevelSetFunction(
@@ -217,8 +213,9 @@ int main(int argc, char ** argv) {
 
     if(argc < 11) {
         cout << endl;
-        cout << "OpenCL Level Set Segmentation by Erik Smistad" << endl;
-        cout << "=============================================" << endl;
+        cout << "OpenCL Level Set Segmentation by Erik Smistad 2013" << endl;
+        cout << "www.github.com/smistad/OpenCL-Level-Set-Segmentation/" << endl;
+        cout << "======================================================" << endl;
         cout << "The speed function is defined as -alpha*(epsilon-(T-intensity))+(1-alpha)*curvature" << endl;
         cout << "Usage: " << argv[0] << " inputFile.mhd outputFile.mhd seedX seedY seedZ seedRadius iterations threshold epsilon alpha [level window]" << endl;
         cout << "If the level and window arguments are set, the segmentation result will be displayed as an overlay to the input volume " << endl;
@@ -273,7 +270,7 @@ int main(int argc, char ** argv) {
         segmentation->save(argv[2]);
 
     } catch(cl::Error &e) {
-        cout << "OpenCL error occured: " << e.what() << " " << getCLErrorString(e.err()) << endl;
+        cout << "OpenCL error occurred: " << e.what() << " " << getCLErrorString(e.err()) << endl;
     }
 
 }
