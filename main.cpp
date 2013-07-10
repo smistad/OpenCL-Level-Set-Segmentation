@@ -224,7 +224,7 @@ int main(int argc, char ** argv) {
 
     // Create OpenCL context
     OpenCL ocl;
-    ocl.context = createCLContextFromArguments(argc,argv);
+    ocl.context = createCLContext(CL_DEVICE_TYPE_GPU, VENDOR_ANY);
     VECTOR_CLASS<cl::Device> devices = ocl.context.getInfo<CL_CONTEXT_DEVICES>();
     std::cout << "Using device: " << devices[0].getInfo<CL_DEVICE_NAME>() << std::endl;
     ocl.device = devices[0];
