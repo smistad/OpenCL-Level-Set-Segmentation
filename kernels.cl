@@ -88,9 +88,9 @@ __kernel void updateLevelSetFunction(
     float curvature = ((nPlus.x-nMinus.x)+(nPlus.y-nMinus.y)+(nPlus.z-nMinus.z))*0.5f;
 
     // Calculate speed term
-    float alpha = 0.01;
+    float alpha = 0.005;
     float threshold = 150;
-    float epsilon = 50;
+    float epsilon = 30;
     //float speed = -alpha*(epsilon-fabs(input->get(pos)-threshold)) + (1.0f-alpha)*curvature;
     float speed = -alpha*(epsilon-(threshold-read_imagei(input,sampler,pos).x)) + (1.0f-alpha)*curvature;
 
@@ -110,4 +110,16 @@ __kernel void updateLevelSetFunction(
 
     // Update the level set function phi
     write_imagef(phi_write, pos, read_imagef(phi_read,sampler,pos).x + deltaT*speed*length(gradient));
+}
+
+__kernel void initializeLevelSetFunction(
+        __write_only image3d_t phi,
+        __private int seedX,
+        __private int seedY,
+        __private int seedZ,
+        __private float radius
+        ) {
+    const int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
+
+    write_imagef(phi, pos, distance((float3)(seedX,seedY,seedZ), convert_float3(pos.xyz)) - radius);
 }

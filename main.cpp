@@ -114,21 +114,6 @@ Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
     return newPhi;
 }
 
-Volume<float> * createInitialMask(int3 origin, int size, int3 volumeSize) {
-
-    Volume<float> * mask = new Volume<float>(volumeSize);
-    mask->fill(1.0f);
-
-    for(int z = origin.z; z < origin.z+size; z++) {
-    for(int y = origin.y; y < origin.y+size; y++) {
-    for(int x = origin.x; x < origin.x+size; x++) {
-        float value = -1.0f;
-        mask->set(x,y,z, value);
-    }}}
-
-    return mask;
-}
-
 void updateLevelSetFunction(OpenCL &ocl, cl::Kernel &kernel, cl::Image3D &input, cl::Image3D &phi_read, cl::Image3D &phi_write, int3 size) {
 
     kernel.setArg(0, input);
@@ -141,119 +126,6 @@ void updateLevelSetFunction(OpenCL &ocl, cl::Kernel &kernel, cl::Image3D &input,
             cl::NDRange(size.x,size.y,size.z),
             cl::NullRange
     );
-
-    /*
-    Volume<float> * phiNext = new Volume<float>(phi->getSize());
-    phiNext->fill(1000);
-#pragma omp parallel for
-    for(int z = 1; z < phi->getDepth()-1; z++) {
-    for(int y = 1; y < phi->getHeight()-1; y++) {
-    for(int x = 1; x < phi->getWidth()-1; x++) {
-        int3 pos(x,y,z);
-
-        // Calculate all first order derivatives
-        float3 D(
-                0.5f*(phi->get(int3(x+1,y,z))-phi->get(int3(x-1,y,z))),
-                0.5f*(phi->get(int3(x,y+1,z))-phi->get(int3(x,y-1,z))),
-                0.5f*(phi->get(int3(x,y,z+1))-phi->get(int3(x,y,z-1)))
-        );
-        float3 Dminus(
-                phi->get(pos)-phi->get(int3(x-1,y,z)),
-                phi->get(pos)-phi->get(int3(x,y-1,z)),
-                phi->get(pos)-phi->get(int3(x,y,z-1))
-        );
-        float3 Dplus(
-                phi->get(int3(x+1,y,z))-phi->get(pos),
-                phi->get(int3(x,y+1,z))-phi->get(pos),
-                phi->get(int3(x,y,z+1))-phi->get(pos)
-        );
-
-        // Calculate gradient
-        float3 gradientMin(
-                sqrt(pow(MIN(Dplus.x, 0.0f), 2.0f) + pow(MIN(-Dminus.x, 0.0f), 2.0f)),
-                sqrt(pow(MIN(Dplus.y, 0.0f), 2.0f) + pow(MIN(-Dminus.y, 0.0f), 2.0f)),
-                sqrt(pow(MIN(Dplus.z, 0.0f), 2.0f) + pow(MIN(-Dminus.z, 0.0f), 2.0f))
-        );
-        float3 gradientMax(
-                sqrt(pow(MAX(Dplus.x, 0.0f), 2.0f) + pow(MAX(-Dminus.x, 0.0f), 2.0f)),
-                sqrt(pow(MAX(Dplus.y, 0.0f), 2.0f) + pow(MAX(-Dminus.y, 0.0f), 2.0f)),
-                sqrt(pow(MAX(Dplus.z, 0.0f), 2.0f) + pow(MAX(-Dminus.z, 0.0f), 2.0f))
-        );
-
-        // Calculate all second order derivatives
-        float3 DxMinus(
-                0.0f,
-                0.5f*(phi->get(int3(x+1,y-1,z))-phi->get(int3(x-1,y-1,z))),
-                0.5f*(phi->get(int3(x+1,y,z-1))-phi->get(int3(x-1,y,z-1)))
-        );
-        float3 DxPlus(
-                0.0f,
-                0.5f*(phi->get(int3(x+1,y+1,z))-phi->get(int3(x-1,y+1,z))),
-                0.5f*(phi->get(int3(x+1,y,z+1))-phi->get(int3(x-1,y,z+1)))
-        );
-        float3 DyMinus(
-                0.5f*(phi->get(int3(x-1,y+1,z))-phi->get(int3(x-1,y-1,z))),
-                0.0f,
-                0.5f*(phi->get(int3(x,y+1,z-1))-phi->get(int3(x,y-1,z-1)))
-        );
-        float3 DyPlus(
-                0.5f*(phi->get(int3(x+1,y+1,z))-phi->get(int3(x+1,y-1,z))),
-                0.0f,
-                0.5f*(phi->get(int3(x,y+1,z+1))-phi->get(int3(x,y-1,z+1)))
-        );
-        float3 DzMinus(
-                0.5f*(phi->get(int3(x-1,y,z+1))-phi->get(int3(x-1,y,z-1))),
-                0.5f*(phi->get(int3(x,y-1,z+1))-phi->get(int3(x,y-1,z-1))),
-                0.0f
-        );
-        float3 DzPlus(
-                0.5f*(phi->get(int3(x+1,y,z+1))-phi->get(int3(x+1,y,z-1))),
-                0.5f*(phi->get(int3(x,y+1,z+1))-phi->get(int3(x,y+1,z-1))),
-                0.0f
-        );
-
-        // Calculate curvature
-        float3 nMinus(
-                Dminus.x / sqrt(FLT_EPSILON+Dminus.x*Dminus.x+pow(0.5f*(DyMinus.x+D.y),2.0f)+pow(0.5f*(DzMinus.x+D.z),2.0f)),
-                Dminus.y / sqrt(FLT_EPSILON+Dminus.y*Dminus.y+pow(0.5f*(DxMinus.y+D.x),2.0f)+pow(0.5f*(DzMinus.y+D.z),2.0f)),
-                Dminus.z / sqrt(FLT_EPSILON+Dminus.z*Dminus.z+pow(0.5f*(DxMinus.z+D.x),2.0f)+pow(0.5f*(DyMinus.z+D.y),2.0f))
-        );
-        float3 nPlus(
-                Dplus.x / sqrt(FLT_EPSILON+Dplus.x*Dplus.x+pow(0.5f*(DyPlus.x+D.y),2.0f)+pow(0.5f*(DzPlus.x+D.z),2.0f)),
-                Dplus.y / sqrt(FLT_EPSILON+Dplus.y*Dplus.y+pow(0.5f*(DxPlus.y+D.x),2.0f)+pow(0.5f*(DzPlus.y+D.z),2.0f)),
-                Dplus.z / sqrt(FLT_EPSILON+Dplus.z*Dplus.z+pow(0.5f*(DxPlus.z+D.x),2.0f)+pow(0.5f*(DyPlus.z+D.y),2.0f))
-        );
-
-        float curvature = ((nPlus.x-nMinus.x)+(nPlus.y-nMinus.y)+(nPlus.z-nMinus.z))*0.5f;
-
-        // Calculate speed term
-        float alpha = 0.02;
-        float threshold = 150;
-        float epsilon = 50;
-        //float speed = -alpha*(epsilon-fabs(input->get(pos)-threshold)) + (1.0f-alpha)*curvature;
-        float speed = -alpha*(epsilon-(threshold-input->get(pos))) + (1.0f-alpha)*curvature;
-
-        // Determine gradient based on speed direction
-        float3 gradient;
-        if(speed < 0) {
-            gradient = gradientMin;
-        } else {
-            gradient = gradientMax;
-        }
-        if(gradient.length() > 1.0f)
-            gradient = gradient.normalize();
-
-        // Stability CFL
-        // max(fabs(speed*gradient.length()))
-        float deltaT = 0.1f;
-
-        // Update the level set function phi
-        phiNext->set(pos, phi->get(pos) + deltaT*speed*gradient.length());
-        //std::cout << speed << " " << gradient.length() << std::endl;
-    }}}
-    delete phi;
-    return phiNext;
-    */
 }
 
 void visualize(Volume<short> * input, Volume<float> * phi) {
@@ -278,12 +150,8 @@ void visualize(Volume<short> * input, Volume<float> * phi) {
 
 }
 
-Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * initialMask, int iterations, int reinitialize) {
-    Volume<float> * phi = calculateSignedDistanceTransform(initialMask);
-    std::cout << "signed distance transform created" << std::endl;
-
-    // Create textures
-
+Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, int3 seedPos, float seedRadius, int iterations, int reinitialize) {
+    int3 size = input->getSize();
     cl::Image3D inputData = cl::Image3D(
             ocl.context,
             CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
@@ -294,16 +162,30 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * 
             0,0,
             input->getData()
     );
+
     cl::Image3D phi_1 = cl::Image3D(
             ocl.context,
-            CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+            CL_MEM_READ_WRITE,
             cl::ImageFormat(CL_R, CL_FLOAT),
             input->getWidth(),
             input->getHeight(),
-            input->getDepth(),
-            0,0,
-            phi->getData()
+            input->getDepth()
     );
+
+    // Create seed
+    cl::Kernel createSeedKernel(ocl.program, "initializeLevelSetFunction");
+    createSeedKernel.setArg(0, phi_1);
+    createSeedKernel.setArg(1, seedPos.x);
+    createSeedKernel.setArg(2, seedPos.y);
+    createSeedKernel.setArg(3, seedPos.z);
+    createSeedKernel.setArg(4, seedRadius);
+    ocl.queue.enqueueNDRangeKernel(
+            createSeedKernel,
+            cl::NullRange,
+            cl::NDRange(size.x,size.y,size.z),
+            cl::NullRange
+    );
+
     cl::Image3D phi_2 = cl::Image3D(
             ocl.context,
             CL_MEM_READ_WRITE,
@@ -315,7 +197,6 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * 
     cl::Kernel kernel(ocl.program, "updateLevelSetFunction");
 
 
-    int3 size = input->getSize();
     cl::Image3D * phi_final;
     for(int i = 0; i < iterations; i++) {
         if(i % 2 == 0) {
@@ -326,10 +207,12 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * 
             phi_final = &phi_1;
         }
 
+        /*
         if(i > 0 && i % reinitialize == 0) {
             phi = calculateSignedDistanceTransform(phi);
             std::cout << "signed distance transform created" << std::endl;
         }
+        */
     }
 
     cl::size_t<3> origin;
@@ -340,6 +223,7 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * 
     region[0] = size.x;
     region[1] = size.y;
     region[2] = size.z;
+    Volume<float> * phi = new Volume<float>(input->getSize());
     float * data = phi->getData();
     ocl.queue.enqueueReadImage(
             *phi_final,
@@ -353,24 +237,6 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * 
     phi->setData(data);
 
     return phi;
-}
-
-float * createBlurMask(float sigma, int maskSize) {
-    float * mask = new float[(maskSize*2+1)*(maskSize*2+1)*(maskSize*2+1)];
-    float sum = 0.0f;
-    for(int a = -maskSize; a < maskSize+1; a++) {
-        for(int b = -maskSize; b < maskSize+1; b++) {
-            for(int c = -maskSize; c < maskSize+1; c++) {
-                sum += exp(-((float)(a*a+b*b+c*c) / (2*sigma*sigma)));
-                mask[a+maskSize+(b+maskSize)*(maskSize*2+1)+(c+maskSize)*(maskSize*2+1)*(maskSize*2+1)] = exp(-((float)(a*a+b*b+c*c) / (2*sigma*sigma)));
-
-            }
-        }
-    }
-    for(int i = 0; i < (maskSize*2+1)*(maskSize*2+1)*(maskSize*2+1); i++)
-        mask[i] = mask[i] / sum;
-
-    return mask;
 }
 
 int main(int argc, char ** argv) {
@@ -404,15 +270,11 @@ int main(int argc, char ** argv) {
 
     // Set initial mask
     int3 origin(atoi(argv[3]), atoi(argv[4]), atoi(argv[5]));
-    int size = atoi(argv[6]);
-
-    Volume<float> * initialMask = createInitialMask(origin, size, input->getSize());
-    visualize(input, initialMask);
-
+    float seedRadius = atof(argv[6]);
 
     // Do level set
     try {
-        Volume<float> * res = runLevelSet(ocl, input, initialMask, atoi(argv[7]), 1000000);
+        Volume<float> * res = runLevelSet(ocl, input, origin, seedRadius, atoi(argv[7]), 1000000);
 
         // Visualize result
         visualize(input, res);
