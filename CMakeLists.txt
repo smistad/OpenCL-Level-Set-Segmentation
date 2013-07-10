@@ -16,7 +16,8 @@ if(OPENMP_FOUND)
 endif()
 
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O3 -g -DKERNELS_DIR=\"${PROJECT_SOURCE_DIR}/\"")
+message(\"${PROJECT_SOURCE_DIR}/\")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O3 -g -DKERNELS_DIR=\\\"${PROJECT_SOURCE_DIR}/\\\"")
 
 add_executable(levelSetSeg main.cpp)
 target_link_libraries(levelSetSeg SIPL OCL-Utilities)

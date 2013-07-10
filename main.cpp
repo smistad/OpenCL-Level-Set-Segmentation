@@ -10,9 +10,9 @@ using namespace std;
 #define MAX(a,b) (a > b ? a : b)
 #define MIN(a,b) (a < b ? a : b)
 
-//#ifndef KERNELS_DIR
-#define KERNELS_DIR "/home/smistad/Dropbox/Programmering/OpenCL-Level-Set-Segmentation/"
-//#endif
+#ifndef KERNELS_DIR
+#define KERNELS_DIR ""
+#endif
 
 typedef struct OpenCL {
     cl::Context context;
