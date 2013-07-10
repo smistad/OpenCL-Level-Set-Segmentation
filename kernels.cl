@@ -12,7 +12,10 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_T
 __kernel void updateLevelSetFunction(
         __read_only image3d_t input,
         __read_only image3d_t phi_read,
-        PHI_WRITE_TYPE phi_write
+        PHI_WRITE_TYPE phi_write,
+        __private float threshold,
+        __private float epsilon,
+        __private float alpha
         ) {
     int x = get_global_id(0);
     int y = get_global_id(1);
@@ -95,9 +98,6 @@ __kernel void updateLevelSetFunction(
     float curvature = ((nPlus.x-nMinus.x)+(nPlus.y-nMinus.y)+(nPlus.z-nMinus.z))*0.5f;
 
     // Calculate speed term
-    float alpha = 0.005f;
-    float threshold = 150.0f;
-    float epsilon = 30.0f;
     float speed = -alpha*(epsilon-(threshold-read_imagef(input,sampler,pos).x)) + (1.0f-alpha)*curvature;
 
     // Determine gradient based on speed direction

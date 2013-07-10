@@ -21,104 +21,25 @@ typedef struct OpenCL {
     cl::Device device;
     cl::Platform platform;
 } OpenCL;
-Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
-    // Identify the zero level set
-    queue<int3> queue;
-    Volume<float> * newPhi = new Volume<float>(phi->getSize());
-    float inf = -9999999.0f;
-    float inf2 = -99999999.0f;
-    newPhi->fill(inf);
-    float threshold = 0.00001f;
 
-    for(int z = 1; z < phi->getDepth()-1; z++) {
-    for(int y = 1; y < phi->getHeight()-1; y++) {
-    for(int x = 1; x < phi->getWidth()-1; x++) {
-        int3 pos(x,y,z);
-        if(phi->get(pos) > 0) {
-            // Check to see if it is a border point
-            bool positive = false;
-            bool negative = false;
-            for(int a = -1; a < 2; a++) {
-            for(int b = -1; b < 2; b++) {
-            for(int c = -1; c < 2; c++) {
-                int3 r(a,b,c);
-                int3 n = pos + r;
-                if(!phi->inBounds(n))
-                    continue;
-                if(phi->get(n) >= 0) {
-                    positive = true;
-                } else {
-                    negative = true;
-                }
-            }}}
-
-            if(positive && negative) {
-                // Is a border point
-                newPhi->set(pos, 0.0f);
-
-                // Add neighbors to queue
-                for(int a = -1; a < 2; a++) {
-                for(int b = -1; b < 2; b++) {
-                for(int c = -1; c < 2; c++) {
-                    int3 r(a,b,c);
-                    int3 n = pos + r;
-                    if(!phi->inBounds(n))
-                        continue;
-                    queue.push(n);
-                }}}
-            }
-        }
-    }}}
-
-    // Do a BFS over the entire volume with the zero level set as start points
-    // If phi is negative, distance is set as negative
-    // If it is positive distance is set as positive
-    while(!queue.empty()) {
-        int3 current = queue.front();
-        queue.pop();
-        if(newPhi->get(current) > inf) // already processed
-            continue;
-
-        bool negative = phi->get(current) < 0;
-        float newDistance = inf;
-        if(!negative)
-            newDistance *= -1.0f;
-
-        // Check all neighbors that are not inf or inf2
-        for(int a = -1; a < 2; a++) {
-        for(int b = -1; b < 2; b++) {
-        for(int c = -1; c < 2; c++) {
-            int3 r(a,b,c);
-            int3 n = current + r;
-            if(!phi->inBounds(n) || (a == 0 && b == 0 && c == 0))
-                continue;
-
-            if(newPhi->get(n) != inf && newPhi->get(n) != inf2) {
-                if(negative) {
-                    newDistance = MAX(newDistance, newPhi->get(n)-r.length());
-                } else {
-                    newDistance = MIN(newDistance, newPhi->get(n)+r.length());
-                }
-            } else if(newPhi->get(n) != inf2) {
-                // Unvisited, Add to queue
-                queue.push(n);
-                newPhi->set(n,inf2);
-            }
-        }}}
-
-        newPhi->set(current, newDistance);
-
-    }
-
-    delete phi;
-    return newPhi;
-}
-
-void updateLevelSetFunction(OpenCL &ocl, cl::Kernel &kernel, cl::Image3D &input, cl::Image3D &phi_read, cl::Image3D &phi_write, int3 size) {
+void updateLevelSetFunction(
+        OpenCL &ocl,
+        cl::Kernel &kernel,
+        cl::Image3D &input,
+        cl::Image3D &phi_read,
+        cl::Image3D &phi_write,
+        int3 size,
+        float threshold,
+        float epsilon,
+        float alpha
+        ) {
 
     kernel.setArg(0, input);
     kernel.setArg(1, phi_read);
     kernel.setArg(2, phi_write);
+    kernel.setArg(3, threshold);
+    kernel.setArg(4, epsilon);
+    kernel.setArg(5, alpha);
 
     ocl.queue.enqueueNDRangeKernel(
             kernel,
@@ -128,11 +49,25 @@ void updateLevelSetFunction(OpenCL &ocl, cl::Kernel &kernel, cl::Image3D &input,
     );
 }
 
-void updateLevelSetFunction(OpenCL &ocl, cl::Kernel &kernel, cl::Image3D &input, cl::Image3D &phi_read, cl::Buffer &phi_write, int3 size) {
+void updateLevelSetFunction(
+        OpenCL &ocl,
+        cl::Kernel &kernel,
+        cl::Image3D &input,
+        cl::Image3D &phi_read,
+        cl::Buffer &phi_write,
+        int3 size,
+        float threshold,
+        float epsilon,
+        float alpha
+        ) {
 
     kernel.setArg(0, input);
     kernel.setArg(1, phi_read);
     kernel.setArg(2, phi_write);
+    kernel.setArg(3, threshold);
+    kernel.setArg(4, epsilon);
+    kernel.setArg(5, alpha);
+
 
     ocl.queue.enqueueNDRangeKernel(
             kernel,
@@ -143,18 +78,19 @@ void updateLevelSetFunction(OpenCL &ocl, cl::Kernel &kernel, cl::Image3D &input,
 }
 
 
-void visualize(Volume<float> * input, Volume<float> * phi) {
+void visualize(Volume<float> * input, Volume<float> * phi, float level, float window) {
     Volume<float2> * maskAndInput = new Volume<float2>(input->getSize());
     for(int i = 0; i < input->getTotalSize(); i++) {
         float2 v(0,0);
         float intensity = input->get(i);
-        if(intensity < 50) {
+        if(intensity < level-window*0.5f) {
             intensity = 0.0f;
-        } else if(intensity > 150) {
+        } else if(intensity > level+window*0.5f) {
             intensity = 1.0f;
         } else {
-            intensity = (intensity - 50.0f)/100.0f;
+            intensity = (float)(intensity-(level-window*0.5f)) / window;
         }
+
         v.x = intensity;
         if(phi->get(i) < 0) {
             v.y = 1.0f;
@@ -165,7 +101,16 @@ void visualize(Volume<float> * input, Volume<float> * phi) {
 
 }
 
-Volume<float> * runLevelSet(OpenCL &ocl, Volume<float> * input, int3 seedPos, float seedRadius, int iterations, int reinitialize) {
+Volume<float> * runLevelSet(
+        OpenCL &ocl,
+        Volume<float> * input,
+        int3 seedPos,
+        float seedRadius,
+        int iterations,
+        float threshold,
+        float epsilon,
+        float alpha
+        ) {
     int3 size = input->getSize();
     cl::Image3D inputData = cl::Image3D(
             ocl.context,
@@ -220,7 +165,7 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<float> * input, int3 seedPos, fl
         );
 
         for(int i = 0; i < iterations; i++) {
-            updateLevelSetFunction(ocl, kernel, inputData, phi_1, writeBuffer, size);
+            updateLevelSetFunction(ocl, kernel, inputData, phi_1, writeBuffer, size, threshold, epsilon, alpha);
             ocl.queue.enqueueCopyBufferToImage(
                     writeBuffer,
                     phi_1,
@@ -241,9 +186,9 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<float> * input, int3 seedPos, fl
 
         for(int i = 0; i < iterations; i++) {
             if(i % 2 == 0) {
-                updateLevelSetFunction(ocl, kernel, inputData, phi_1, phi_2, size);
+                updateLevelSetFunction(ocl, kernel, inputData, phi_1, phi_2, size, threshold, epsilon, alpha);
             } else {
-                updateLevelSetFunction(ocl, kernel, inputData, phi_2, phi_1, size);
+                updateLevelSetFunction(ocl, kernel, inputData, phi_2, phi_1, size, threshold, epsilon, alpha);
             }
         }
         if(iterations % 2 != 0) {
@@ -270,8 +215,13 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<float> * input, int3 seedPos, fl
 
 int main(int argc, char ** argv) {
 
-    if(argc < 8) {
-        cout << "usage: " << argv[0] << " inputFile.mhd outputFile.mhd seedX seedY seedZ seedRadius iterations" << endl;
+    if(argc < 11) {
+        cout << endl;
+        cout << "OpenCL Level Set Segmentation by Erik Smistad" << endl;
+        cout << "=============================================" << endl;
+        cout << "The speed function is defined as -alpha*(epsilon-(T-intensity))+(1-alpha)*curvature" << endl;
+        cout << "Usage: " << argv[0] << " inputFile.mhd outputFile.mhd seedX seedY seedZ seedRadius iterations threshold epsilon alpha [level window]" << endl;
+        cout << "If the level and window arguments are set, the segmentation result will be displayed as an overlay to the input volume " << endl;
         return -1;
     }
 
@@ -295,15 +245,19 @@ int main(int argc, char ** argv) {
     std::cout << "Dataset of size " << input->getWidth() << ", " << input->getHeight() << ", " << input->getDepth() << " loaded "<< std::endl;
 
     // Set initial mask
-    int3 origin(atoi(argv[3]), atoi(argv[4]), atoi(argv[5]));
+    int3 seedPosition(atoi(argv[3]), atoi(argv[4]), atoi(argv[5]));
     float seedRadius = atof(argv[6]);
 
     // Do level set
     try {
-        Volume<float> * res = runLevelSet(ocl, input, origin, seedRadius, atoi(argv[7]), 1000000);
+        Volume<float> * res = runLevelSet(ocl, input, seedPosition, seedRadius, atoi(argv[7]), atof(argv[8]), atof(argv[9]), atof(argv[10]));
 
         // Visualize result
-        visualize(input, res);
+        if(argc == 13) {
+            float level = atof(argv[11]);
+            float window = atof(argv[12]);
+            visualize(input, res, level, window);
+        }
 
         // Store result
         Volume<char> * segmentation = new Volume<char>(res->getSize());
