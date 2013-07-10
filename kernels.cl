@@ -1,11 +1,18 @@
-
+#ifdef NO_3D_WRITE
+#define PHI_WRITE_TYPE __global float *
+#define WRITE_RESULT(storage, pos, value) storage[pos.x+pos.y*get_global_id(0)+pos.z*get_global_id(0)*get_global_id(1)] = value;
+#else
 #pragma OPENCL EXTENSION cl_khr_3d_image_writes : enable
+#define PHI_WRITE_TYPE __write_only image3d_t
+#define WRITE_RESULT(storage, pos, value) write_imagef(storage, pos, value)
+#endif
+
 __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_NEAREST;
 
 __kernel void updateLevelSetFunction(
         __read_only image3d_t input,
         __read_only image3d_t phi_read,
-        __write_only image3d_t phi_write
+        PHI_WRITE_TYPE phi_write
         ) {
     int x = get_global_id(0);
     int y = get_global_id(1);
@@ -109,11 +116,11 @@ __kernel void updateLevelSetFunction(
     float deltaT = 0.1f;
 
     // Update the level set function phi
-    write_imagef(phi_write, pos, read_imagef(phi_read,sampler,pos).x + deltaT*speed*length(gradient));
+    WRITE_RESULT(phi_write, pos, read_imagef(phi_read,sampler,pos).x + deltaT*speed*length(gradient));
 }
 
 __kernel void initializeLevelSetFunction(
-        __write_only image3d_t phi,
+        PHI_WRITE_TYPE phi,
         __private int seedX,
         __private int seedY,
         __private int seedZ,
@@ -121,5 +128,5 @@ __kernel void initializeLevelSetFunction(
         ) {
     const int4 pos = {get_global_id(0), get_global_id(1), get_global_id(2), 0};
 
-    write_imagef(phi, pos, distance((float3)(seedX,seedY,seedZ), convert_float3(pos.xyz)) - radius);
+    WRITE_RESULT(phi, pos, distance((float3)(seedX,seedY,seedZ), convert_float3(pos.xyz)) - radius);
 }

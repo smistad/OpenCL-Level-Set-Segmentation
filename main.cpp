@@ -128,6 +128,21 @@ void updateLevelSetFunction(OpenCL &ocl, cl::Kernel &kernel, cl::Image3D &input,
     );
 }
 
+void updateLevelSetFunction(OpenCL &ocl, cl::Kernel &kernel, cl::Image3D &input, cl::Image3D &phi_read, cl::Buffer &phi_write, int3 size) {
+
+    kernel.setArg(0, input);
+    kernel.setArg(1, phi_read);
+    kernel.setArg(2, phi_write);
+
+    ocl.queue.enqueueNDRangeKernel(
+            kernel,
+            cl::NullRange,
+            cl::NDRange(size.x,size.y,size.z),
+            cl::NullRange
+    );
+}
+
+
 void visualize(Volume<short> * input, Volume<float> * phi) {
     Volume<float2> * maskAndInput = new Volume<float2>(input->getSize());
     for(int i = 0; i < input->getTotalSize(); i++) {
@@ -186,35 +201,7 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, int3 seedPos, fl
             cl::NullRange
     );
 
-    cl::Image3D phi_2 = cl::Image3D(
-            ocl.context,
-            CL_MEM_READ_WRITE,
-            cl::ImageFormat(CL_R, CL_FLOAT),
-            input->getWidth(),
-            input->getHeight(),
-            input->getDepth()
-    );
     cl::Kernel kernel(ocl.program, "updateLevelSetFunction");
-
-
-    cl::Image3D * phi_final;
-    for(int i = 0; i < iterations; i++) {
-        if(i % 2 == 0) {
-            updateLevelSetFunction(ocl, kernel, inputData, phi_1, phi_2, size);
-            phi_final = &phi_2;
-        } else {
-            updateLevelSetFunction(ocl, kernel, inputData, phi_2, phi_1, size);
-            phi_final = &phi_1;
-        }
-
-        /*
-        if(i > 0 && i % reinitialize == 0) {
-            phi = calculateSignedDistanceTransform(phi);
-            std::cout << "signed distance transform created" << std::endl;
-        }
-        */
-    }
-
     cl::size_t<3> origin;
     origin[0] = 0;
     origin[1] = 0;
@@ -223,10 +210,52 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, int3 seedPos, fl
     region[0] = size.x;
     region[1] = size.y;
     region[2] = size.z;
+
+    if(ocl.device.getInfo<CL_DEVICE_EXTENSIONS>().find("cl_khr_3d_image_writes") == 0) {
+        // Create auxillary buffer
+        cl::Buffer writeBuffer = cl::Buffer(
+                ocl.context,
+                CL_MEM_WRITE_ONLY,
+                sizeof(float)*size.x*size.y*size.z
+        );
+
+        for(int i = 0; i < iterations; i++) {
+            updateLevelSetFunction(ocl, kernel, inputData, phi_1, writeBuffer, size);
+            ocl.queue.enqueueCopyBufferToImage(
+                    writeBuffer,
+                    phi_1,
+                    0,
+                    origin,
+                    region
+            );
+        }
+    } else {
+        cl::Image3D phi_2 = cl::Image3D(
+            ocl.context,
+            CL_MEM_READ_WRITE,
+            cl::ImageFormat(CL_R, CL_FLOAT),
+            input->getWidth(),
+            input->getHeight(),
+            input->getDepth()
+        );
+
+        for(int i = 0; i < iterations; i++) {
+            if(i % 2 == 0) {
+                updateLevelSetFunction(ocl, kernel, inputData, phi_1, phi_2, size);
+            } else {
+                updateLevelSetFunction(ocl, kernel, inputData, phi_2, phi_1, size);
+            }
+        }
+        if(iterations % 2 != 0) {
+            // Phi_2 was written to in the last iteration, copy this to the result
+            ocl.queue.enqueueCopyImage(phi_2,phi_1,origin,origin,region);
+        }
+    }
+
     Volume<float> * phi = new Volume<float>(input->getSize());
     float * data = phi->getData();
     ocl.queue.enqueueReadImage(
-            *phi_final,
+            phi_1,
             CL_TRUE,
             origin,
             region,
@@ -241,7 +270,7 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, int3 seedPos, fl
 
 int main(int argc, char ** argv) {
 
-    if(argc != 8) {
+    if(argc < 8) {
         cout << "usage: " << argv[0] << " inputFile.mhd outputFile.mhd seedX seedY seedZ seedRadius iterations" << endl;
         return -1;
     }
@@ -254,6 +283,9 @@ int main(int argc, char ** argv) {
     ocl.device = devices[0];
     ocl.queue = cl::CommandQueue(ocl.context, devices[0]);
     string filename = string(KERNELS_DIR) + string("kernels.cl");
+    string buildOptions = "";
+    if(ocl.device.getInfo<CL_DEVICE_EXTENSIONS>().find("cl_khr_3d_image_writes") == 0)
+        buildOptions = "-DNO_3D_WRITE";
     ocl.program = buildProgramFromSource(ocl.context, filename);
 
     // Load volume
@@ -266,7 +298,7 @@ int main(int argc, char ** argv) {
             input->set(i,200);
     }
 
-    std::cout << "Dataset of size " << input->getWidth() << ", " << input->getHeight() << ", " << input->getDepth() << std::endl;
+    std::cout << "Dataset of size " << input->getWidth() << ", " << input->getHeight() << ", " << input->getDepth() << " loaded "<< std::endl;
 
     // Set initial mask
     int3 origin(atoi(argv[3]), atoi(argv[4]), atoi(argv[5]));
