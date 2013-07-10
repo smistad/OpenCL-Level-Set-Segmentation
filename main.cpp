@@ -10,6 +10,10 @@ using namespace std;
 #define MAX(a,b) (a > b ? a : b)
 #define MIN(a,b) (a < b ? a : b)
 
+//#ifndef KERNELS_DIR
+#define KERNELS_DIR "/home/smistad/Dropbox/Programmering/OpenCL-Level-Set-Segmentation/"
+//#endif
+
 typedef struct OpenCL {
     cl::Context context;
     cl::CommandQueue queue;
@@ -283,10 +287,11 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * 
     cl::Image3D inputData = cl::Image3D(
             ocl.context,
             CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-            cl::ImageFormat(CL_SIGNED_INT16, CL_FLOAT),
+            cl::ImageFormat(CL_R, CL_SIGNED_INT16),
             input->getWidth(),
             input->getHeight(),
             input->getDepth(),
+            0,0,
             input->getData()
     );
     cl::Image3D phi_1 = cl::Image3D(
@@ -296,6 +301,7 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * 
             input->getWidth(),
             input->getHeight(),
             input->getDepth(),
+            0,0,
             phi->getData()
     );
     cl::Image3D phi_2 = cl::Image3D(
@@ -391,7 +397,8 @@ int main(int argc, char ** argv) {
     std::cout << "Using device: " << devices[0].getInfo<CL_DEVICE_NAME>() << std::endl;
     ocl.device = devices[0];
     ocl.queue = cl::CommandQueue(ocl.context, devices[0]);
-    string filename = "kernels.cl";
+    string filename = string(KERNELS_DIR) + string("kernels.cl");
+    std::cout << filename << endl;
     ocl.program = buildProgramFromSource(ocl.context, filename);
 
     // Load volume
@@ -416,21 +423,27 @@ int main(int argc, char ** argv) {
 
 
     // Do level set
-    Volume<float> * res = runLevelSet(ocl, input, initialMask, atoi(argv[7]), 100);
+    try {
+        Volume<float> * res = runLevelSet(ocl, input, initialMask, atoi(argv[7]), 100);
 
-    // Visualize result
-    visualize(input, res);
+        // Visualize result
+        visualize(input, res);
 
-    // Store result
-    Volume<char> * segmentation = new Volume<char>(res->getSize());
-    segmentation->setSpacing(spacing);
-    for(int i = 0; i < res->getTotalSize(); i++) {
-        if(res->get(i) < 0.0f) {
-            segmentation->set(i, 1);
-        } else {
-            segmentation->set(i, 0);
+        // Store result
+        Volume<char> * segmentation = new Volume<char>(res->getSize());
+        segmentation->setSpacing(spacing);
+        for(int i = 0; i < res->getTotalSize(); i++) {
+            if(res->get(i) < 0.0f) {
+                segmentation->set(i, 1);
+            } else {
+                segmentation->set(i, 0);
+            }
         }
+
+        segmentation->save(argv[2]);
+
+    } catch(cl::Error &e) {
+        cout << "OpenCL error occured: " << e.what() << " " << getCLErrorString(e.err()) << endl;
     }
 
-    segmentation->save(argv[2]);
 }
