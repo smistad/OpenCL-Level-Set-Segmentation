@@ -1,4 +1,5 @@
 #include "SIPL/Core.hpp"
+#include "OpenCLUtilities/openCLUtilities.hpp"
 #include <cmath>
 #include <queue>
 #include <iostream>
@@ -9,6 +10,13 @@ using namespace std;
 #define MAX(a,b) (a > b ? a : b)
 #define MIN(a,b) (a < b ? a : b)
 
+typedef struct OpenCL {
+    cl::Context context;
+    cl::CommandQueue queue;
+    cl::Program program;
+    cl::Device device;
+    cl::Platform platform;
+} OpenCL;
 Volume<float> * calculateSignedDistanceTransform(Volume<float> * phi) {
     // Identify the zero level set
     queue<int3> queue;
@@ -117,7 +125,7 @@ Volume<float> * createInitialMask(int3 origin, int size, int3 volumeSize) {
     return mask;
 }
 
-Volume<float> * updateLevelSetFunction(Volume<short> * input, Volume<float> * phi) {
+Volume<float> * updateLevelSetFunction(OpenCL &ocl, Volume<short> * input, Volume<float> * phi) {
     Volume<float> * phiNext = new Volume<float>(phi->getSize());
     phiNext->fill(1000);
 #pragma omp parallel for
@@ -252,16 +260,46 @@ void visualize(Volume<short> * input, Volume<float> * phi) {
 
 }
 
-Volume<float> * runLevelSet(Volume<short> * input, Volume<float> * initialMask, int iterations, int reinitialize) {
+Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * initialMask, int iterations, int reinitialize) {
     Volume<float> * phi = calculateSignedDistanceTransform(initialMask);
     std::cout << "signed distance transform created" << std::endl;
 
+    // Create textures
+
+    cl::Image3D inputData = cl::Image3D(
+            ocl.context,
+            CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+            cl::ImageFormat(CL_SIGNED_INT16, CL_FLOAT),
+            input->getWidth(),
+            input->getHeight(),
+            input->getDepth(),
+            input->getData()
+    );
+    cl::Image3D phi_1 = cl::Image3D(
+            ocl.context,
+            CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+            cl::ImageFormat(CL_R, CL_FLOAT),
+            input->getWidth(),
+            input->getHeight(),
+            input->getDepth(),
+            phi->getData()
+    );
+    cl::Image3D phi_2 = cl::Image3D(
+            ocl.context,
+            CL_MEM_READ_WRITE,
+            cl::ImageFormat(CL_R, CL_FLOAT),
+            input->getWidth(),
+            input->getHeight(),
+            input->getDepth()
+    );
+
+
     for(int i = 0; i < iterations; i++) {
-        phi = updateLevelSetFunction(input, phi);
-        std::cout << "iteration " << (i+1) << " finished " << std::endl;
-        //if(i % 10 == 0)
-        //visualize(input, phi);
-        //phi->show(0,255);
+        if(i % 2 == 0) {
+            updateLevelSetFunction(ocl, inputData, phi_1, phi_2);
+        } else {
+            updateLevelSetFunction(ocl, inputData, phi_2, phi_1);
+        }
 
         if(i > 0 && i % reinitialize == 0) {
             phi = calculateSignedDistanceTransform(phi);
@@ -330,11 +368,9 @@ void printPhiSlice(Volume<float> * phi) {
 
 int main(int argc, char ** argv) {
 
-    /*
-    Volume<float> * test = createInitialMask(int3(4,4,4), 8, int3(16,16,16));
-    Volume<float> * phi = calculateSignedDistanceTransform(test);
-    printPhiSlice(phi);
-    */
+    // Create OpenCL context
+    OpenCL ocl;
+    ocl.context = createCLContextFromArguments(argc,argv);
 
     // Load volume
     Volume<short> * input = new Volume<short>(argv[1]);
@@ -358,7 +394,7 @@ int main(int argc, char ** argv) {
 
 
     // Do level set
-    Volume<float> * res = runLevelSet(input, initialMask, atoi(argv[7]), 100);
+    Volume<float> * res = runLevelSet(ocl, input, initialMask, atoi(argv[7]), 100);
 
     // Visualize result
     visualize(input, res);
