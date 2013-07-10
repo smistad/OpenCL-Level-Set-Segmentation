@@ -373,45 +373,12 @@ float * createBlurMask(float sigma, int maskSize) {
     return mask;
 }
 
-
-SIPL::Volume<short> * doGaussianBlur(SIPL::Volume<short> * volume, float sigma, int maskSize) {
-    maskSize /= 2;
-    float * mask = createBlurMask(sigma, maskSize);
-    std::cout << "smoothing image with mask size " << maskSize*2+1 << " and sigma " << sigma << std::endl;
-    int stride = 2*maskSize+1;
-    SIPL::Volume<short> * smoothed = new SIPL::Volume<short>(volume->getSize());
-    smoothed->fill(0);
-
-#pragma omp parallel for
-    for(int z = maskSize; z < volume->getDepth()-maskSize; z++) {
-    for(int y = maskSize; y < volume->getHeight()-maskSize; y++) {
-    for(int x = maskSize; x < volume->getWidth()-maskSize; x++) {
-        SIPL::int3 pos(x,y,z);
-        double sum = 0.0f;
-        for(int c = -maskSize; c < maskSize+1; c++) {
-        for(int b = -maskSize; b < maskSize+1; b++) {
-        for(int a = -maskSize; a < maskSize+1; a++) {
-            SIPL::int3 n = pos + SIPL::int3(a,b,c);
-            sum += volume->get(n)*mask[a+maskSize+(b+maskSize)*stride+(c+maskSize)*stride*stride];
-        }}}
-        smoothed->set(pos, (short)floor(sum));
-    }}}
-    delete volume;
-    return smoothed;
-}
-
-void printPhiSlice(Volume<float> * phi) {
-   int slice = phi->getDepth() / 2;
-   for(int y = 0; y < phi->getHeight(); y++) {
-       for(int x = 0; x < phi->getWidth(); x++) {
-           std::cout << phi->get(x,y,slice) << "\t";
-       }
-       std::cout << std::endl;
-   }
-}
-
-
 int main(int argc, char ** argv) {
+
+    if(argc != 8) {
+        cout << "usage: " << argv[0] << " inputFile.mhd outputFile.mhd seedX seedY seedZ seedRadius iterations" << endl;
+        return -1;
+    }
 
     // Create OpenCL context
     OpenCL ocl;
@@ -426,7 +393,6 @@ int main(int argc, char ** argv) {
     // Load volume
     Volume<short> * input = new Volume<short>(argv[1]);
     float3 spacing = input->getSpacing();
-    input = doGaussianBlur(input, 1.0f, 3);
     for(int i = 0; i < input->getTotalSize();i++) {
         if(input->get(i) < 0)
             input->set(i,0);
@@ -446,7 +412,7 @@ int main(int argc, char ** argv) {
 
     // Do level set
     try {
-        Volume<float> * res = runLevelSet(ocl, input, initialMask, atoi(argv[7]), 10000);
+        Volume<float> * res = runLevelSet(ocl, input, initialMask, atoi(argv[7]), 1000000);
 
         // Visualize result
         visualize(input, res);
