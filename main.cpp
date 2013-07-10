@@ -316,11 +316,14 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * 
 
 
     int3 size = input->getSize();
+    cl::Image3D * phi_final;
     for(int i = 0; i < iterations; i++) {
         if(i % 2 == 0) {
             updateLevelSetFunction(ocl, kernel, inputData, phi_1, phi_2, size);
+            phi_final = &phi_2;
         } else {
             updateLevelSetFunction(ocl, kernel, inputData, phi_2, phi_1, size);
+            phi_final = &phi_1;
         }
 
         if(i > 0 && i % reinitialize == 0) {
@@ -328,6 +331,26 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * 
             std::cout << "signed distance transform created" << std::endl;
         }
     }
+
+    cl::size_t<3> origin;
+    origin[0] = 0;
+    origin[1] = 0;
+    origin[2] = 0;
+    cl::size_t<3> region;
+    region[0] = size.x;
+    region[1] = size.y;
+    region[2] = size.z;
+    float * data = phi->getData();
+    ocl.queue.enqueueReadImage(
+            *phi_final,
+            CL_TRUE,
+            origin,
+            region,
+            0, 0,
+            data
+    );
+
+    phi->setData(data);
 
     return phi;
 }
@@ -398,7 +421,6 @@ int main(int argc, char ** argv) {
     ocl.device = devices[0];
     ocl.queue = cl::CommandQueue(ocl.context, devices[0]);
     string filename = string(KERNELS_DIR) + string("kernels.cl");
-    std::cout << filename << endl;
     ocl.program = buildProgramFromSource(ocl.context, filename);
 
     // Load volume
@@ -424,7 +446,7 @@ int main(int argc, char ** argv) {
 
     // Do level set
     try {
-        Volume<float> * res = runLevelSet(ocl, input, initialMask, atoi(argv[7]), 100);
+        Volume<float> * res = runLevelSet(ocl, input, initialMask, atoi(argv[7]), 10000);
 
         // Visualize result
         visualize(input, res);
