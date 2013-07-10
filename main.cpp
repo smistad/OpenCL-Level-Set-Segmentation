@@ -125,7 +125,20 @@ Volume<float> * createInitialMask(int3 origin, int size, int3 volumeSize) {
     return mask;
 }
 
-Volume<float> * updateLevelSetFunction(OpenCL &ocl, Volume<short> * input, Volume<float> * phi) {
+void updateLevelSetFunction(OpenCL &ocl, cl::Kernel &kernel, cl::Image3D &input, cl::Image3D &phi_read, cl::Image3D &phi_write, int3 size) {
+
+    kernel.setArg(0, input);
+    kernel.setArg(1, phi_read);
+    kernel.setArg(2, phi_write);
+
+    ocl.queue.enqueueNDRangeKernel(
+            kernel,
+            cl::NullRange,
+            cl::NDRange(size.x,size.y,size.z),
+            cl::NullRange
+    );
+
+    /*
     Volume<float> * phiNext = new Volume<float>(phi->getSize());
     phiNext->fill(1000);
 #pragma omp parallel for
@@ -236,6 +249,7 @@ Volume<float> * updateLevelSetFunction(OpenCL &ocl, Volume<short> * input, Volum
     }}}
     delete phi;
     return phiNext;
+    */
 }
 
 void visualize(Volume<short> * input, Volume<float> * phi) {
@@ -292,13 +306,15 @@ Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, Volume<float> * 
             input->getHeight(),
             input->getDepth()
     );
+    cl::Kernel kernel(ocl.program, "updateLevelSetFunction");
 
 
+    int3 size = input->getSize();
     for(int i = 0; i < iterations; i++) {
         if(i % 2 == 0) {
-            updateLevelSetFunction(ocl, inputData, phi_1, phi_2);
+            updateLevelSetFunction(ocl, kernel, inputData, phi_1, phi_2, size);
         } else {
-            updateLevelSetFunction(ocl, inputData, phi_2, phi_1);
+            updateLevelSetFunction(ocl, kernel, inputData, phi_2, phi_1, size);
         }
 
         if(i > 0 && i % reinitialize == 0) {
@@ -371,6 +387,12 @@ int main(int argc, char ** argv) {
     // Create OpenCL context
     OpenCL ocl;
     ocl.context = createCLContextFromArguments(argc,argv);
+    VECTOR_CLASS<cl::Device> devices = ocl.context.getInfo<CL_CONTEXT_DEVICES>();
+    std::cout << "Using device: " << devices[0].getInfo<CL_DEVICE_NAME>() << std::endl;
+    ocl.device = devices[0];
+    ocl.queue = cl::CommandQueue(ocl.context, devices[0]);
+    string filename = "kernels.cl";
+    ocl.program = buildProgramFromSource(ocl.context, filename);
 
     // Load volume
     Volume<short> * input = new Volume<short>(argv[1]);
