@@ -4,6 +4,9 @@ project(Level-Set-Function)
 add_subdirectory(SIPL)
 include_directories(${SIPL_INCLUDE_DIRS})
 
+add_subdirectory(OpenCLUtilities)
+include_directories(${OCL-Utilities_INCLUDE_DIRS})
+
 find_package(OpenMP)
 if(OPENMP_FOUND)
     message("-- OpenMP was detected. Using OpenMP to speed up some calculations.")
@@ -13,7 +16,7 @@ if(OPENMP_FOUND)
 endif()
 
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O3 -g -DKERNELS_DIR=\"${PROJECT_SOURCE_DIR}/\"")
 
 add_executable(levelSetSeg main.cpp)
-target_link_libraries(levelSetSeg SIPL)
+target_link_libraries(levelSetSeg SIPL OCL-Utilities)
