@@ -95,11 +95,10 @@ __kernel void updateLevelSetFunction(
     float curvature = ((nPlus.x-nMinus.x)+(nPlus.y-nMinus.y)+(nPlus.z-nMinus.z))*0.5f;
 
     // Calculate speed term
-    float alpha = 0.005;
-    float threshold = 150;
-    float epsilon = 30;
-    //float speed = -alpha*(epsilon-fabs(input->get(pos)-threshold)) + (1.0f-alpha)*curvature;
-    float speed = -alpha*(epsilon-(threshold-read_imagei(input,sampler,pos).x)) + (1.0f-alpha)*curvature;
+    float alpha = 0.005f;
+    float threshold = 150.0f;
+    float epsilon = 30.0f;
+    float speed = -alpha*(epsilon-(threshold-read_imagef(input,sampler,pos).x)) + (1.0f-alpha)*curvature;
 
     // Determine gradient based on speed direction
     float3 gradient;

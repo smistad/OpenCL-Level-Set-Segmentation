@@ -143,7 +143,7 @@ void updateLevelSetFunction(OpenCL &ocl, cl::Kernel &kernel, cl::Image3D &input,
 }
 
 
-void visualize(Volume<short> * input, Volume<float> * phi) {
+void visualize(Volume<float> * input, Volume<float> * phi) {
     Volume<float2> * maskAndInput = new Volume<float2>(input->getSize());
     for(int i = 0; i < input->getTotalSize(); i++) {
         float2 v(0,0);
@@ -165,12 +165,12 @@ void visualize(Volume<short> * input, Volume<float> * phi) {
 
 }
 
-Volume<float> * runLevelSet(OpenCL &ocl, Volume<short> * input, int3 seedPos, float seedRadius, int iterations, int reinitialize) {
+Volume<float> * runLevelSet(OpenCL &ocl, Volume<float> * input, int3 seedPos, float seedRadius, int iterations, int reinitialize) {
     int3 size = input->getSize();
     cl::Image3D inputData = cl::Image3D(
             ocl.context,
             CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-            cl::ImageFormat(CL_R, CL_SIGNED_INT16),
+            cl::ImageFormat(CL_R, CL_FLOAT),
             input->getWidth(),
             input->getHeight(),
             input->getDepth(),
@@ -289,14 +289,8 @@ int main(int argc, char ** argv) {
     ocl.program = buildProgramFromSource(ocl.context, filename);
 
     // Load volume
-    Volume<short> * input = new Volume<short>(argv[1]);
+    Volume<float> * input = new Volume<float>(argv[1]);
     float3 spacing = input->getSpacing();
-    for(int i = 0; i < input->getTotalSize();i++) {
-        if(input->get(i) < 0)
-            input->set(i,0);
-        if(input->get(i) > 200)
-            input->set(i,200);
-    }
 
     std::cout << "Dataset of size " << input->getWidth() << ", " << input->getHeight() << ", " << input->getDepth() << " loaded "<< std::endl;
 
