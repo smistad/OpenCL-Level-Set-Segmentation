@@ -11,17 +11,16 @@ Dependencies
 ------------------------------
 * OpenCL (You need an OpenCL implementation installed (AMD, NVIDIA, Intel, Apple...)
 * Submodules SIPL and OpenCLUtilities (no need to install separately, however remember to initialize them "git submodule update" if you are cloning this repo)
+* GTK2, which SIPL use for displaying the results (`sudo apt-get install libgtk2.0-dev`)
 
 Compiling
 ------------------------------
 Use CMake and the provided CMakeLists.txt file to compile this program.
 To compile on the run the example on Ubuntu, do the following:
 ```bash
-mkdir build
-cd build
-cmake ../CMakeLists.txt
+cmake .
 make
-./levelSetSeg ../example_data/example.mhd result.mhd 10 50 40 5 1000 255 200 0.1 50 100
+./levelSetSeg example_data/mr_brain.mhd result.mhd 100 100 100 10 2000 125 40 0.05 125 255
 ```
 
 Usage
@@ -35,4 +34,4 @@ seedX, seedY, seedZ defines a spherical seed point with a radius seedRadius.
 Iterations is the total number of iterations and threshold, epsilon, alpha are parameters for the speed function `-alpha*(epsilon-|T-intensity|)+(1-alpha)*curvature`.
 If the level and window arguments are set, the segmentation result will be displayed as an overlay to the input volume.
 
-Run with provided example data: `./levelSetSeg example_data/example.mhd result.mhd 10 50 40 5 1000 255 200 0.1 50 100`
+Run with provided example data: `./levelSetSeg example_data/mr_brain.mhd result.mhd 100 100 100 10 2000 125 40 0.05 125 255`

@@ -1,0 +1,4 @@
+NDims = 3
+DimSize = 181 217 181
+ElementType = MET_UCHAR
+ElementDataFile = mr_brain.raw
