@@ -16,13 +16,13 @@ Compiling
 ------------------------------
 Use CMake and the provided CMakeLists.txt file to compile this program.
 To compile on the run the example on Ubuntu, do the following:
-`
+```bash
 mkdir build
 cd build
 cmake ../CMakeLists.txt
 make
 ./levelSetSeg ../example_data/example.mhd result.mhd 10 50 40 5 1000 255 200 0.1 50 100
-`
+```
 
 Usage
 ------------------------------
