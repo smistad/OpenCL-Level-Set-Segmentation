@@ -1,6 +1,6 @@
 #ifdef NO_3D_WRITE
 #define PHI_WRITE_TYPE __global float *
-#define WRITE_RESULT(storage, pos, value) storage[pos.x+pos.y*get_global_id(0)+pos.z*get_global_id(0)*get_global_id(1)] = value;
+#define WRITE_RESULT(storage, pos, value) storage[pos.x+pos.y*get_global_size(0)+pos.z*get_global_size(0)*get_global_size(1)] = value;
 #else
 #pragma OPENCL EXTENSION cl_khr_3d_image_writes : enable
 #define PHI_WRITE_TYPE __write_only image3d_t
