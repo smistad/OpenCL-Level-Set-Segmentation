@@ -1,11 +1,11 @@
 OpenCL Level Set Segmentation
 ==========================================
-![Segmented brain from synthetic MR images using the level set method](http://www.thebigblob.com/wp-content/uploads/level_set_brain_segmentation-263x300.png)
+![Segmented brain from synthetic MR images using the level set method](http://www.eriksmistad.no/wp-content/uploads/level_set_brain_segmentation-263x300.png)
 
 This is an implementation of level set image segmentation using OpenCL.
 The speed function is defined as `-alpha*(epsilon-|T-intensity|)+(1-alpha)*curvature`.
 
-See http://www.thebigblob.com/level-set-segmentation-on-gpus-using-opencl/ for more information on level sets and this implementation.
+See http://www.eriksmistad.no/level-set-segmentation-on-gpus-using-opencl/ for more information on level sets and this implementation.
 
 See LICENSE file for license information.
 
